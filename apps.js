@@ -18,7 +18,6 @@ async function enviarAGoogleSheets(data) {
     }
 }
 
-const app = express();
 
 // Render exige usar su propio puerto dinámico en producción
 const PORT = process.env.PORT || 3000;
