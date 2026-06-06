@@ -17,7 +17,7 @@ async function enviarAGoogleSheets(data) {
         console.error(" Error enviando a Google:", error.message);
     }
 }
-const express = require('express');
+
 const app = express();
 
 // Render exige usar su propio puerto dinámico en producción
