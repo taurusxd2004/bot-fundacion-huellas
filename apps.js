@@ -1,49 +1,71 @@
+// ---------------------------------------------------------
+// 📦 IMPORTACIÓN DE LIBRERÍAS
+// ---------------------------------------------------------
 const axios = require('axios');
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
+// ---------------------------------------------------------
+// 🌐 CONFIGURACIÓN DEL SERVIDOR WEB (Para UptimeRobot)
+// ---------------------------------------------------------
 const app = express();
 app.use(express.json());
-
-const URL_GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbysun2uoM4X4OzwgmjfXNi7y6aTasu4UByomFLDVw2Y8UCPYFAgNLMCYgt3nzypNqg/exec";
-
-
-async function enviarAGoogleSheets(data) {
-    try {
-        const response = await axios.post(URL_GOOGLE_SCRIPT, data);
-        console.log(" Datos enviados a Huellas:", response.data);
-    } catch (error) {
-        console.error(" Error enviando a Google:", error.message);
-    }
-}
-
 
 // Render exige usar su propio puerto dinámico en producción
 const PORT = process.env.PORT || 3000;
 
-// Esta es la ruta principal que visitará UptimeRobot
+// Esta es la ruta principal que visitará UptimeRobot para mantener el bot despierto
 app.get('/', (req, res) => {
-    res.send('🐾 Servidor de la Fundación Huellas activo y despierto');
+    res.send('🐾 Servidor de la Fundación Huellas activo y despierto 24/7');
 });
 
-// Arrancamos el mini servidor
+// Arrancamos el servidor web UNA ÚNICA VEZ
 app.listen(PORT, () => {
     console.log(`🌐 Servidor web de mantenimiento escuchando en el puerto ${PORT}`);
 });
+
+// ---------------------------------------------------------
+// 📊 CONFIGURACIÓN DE GOOGLE SHEETS
+// ---------------------------------------------------------
+const URL_GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbysun2uoM4X4OzwgmjfXNi7y6aTasu4UByomFLDVw2Y8UCPYFAgNLMCYgt3nzypNqg/exec";
+
+async function enviarAGoogleSheets(data) {
+    try {
+        const response = await axios.post(URL_GOOGLE_SCRIPT, data);
+        console.log("✅ Datos enviados a Huellas:", response.data);
+    } catch (error) {
+        console.error("❌ Error enviando a Google:", error.message);
+    }
+}
+
 // ---------------------------------------------------------
 // 🤖 INICIALIZACIÓN DEL BOT DE WHATSAPP
 // ---------------------------------------------------------
 
 // LocalAuth hace que el bot recuerde tu sesión y no te pida el QR cada vez
+// NOTA: En Render gratuito, esto puede pedir QR tras reinicios si no usas MongoDB.
 const bot = new Client({
-    authStrategy: new LocalAuth() 
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        handleSIGINT: false, // Ayuda a la estabilidad en Render
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ],
+    }
 });
 
 // 1. Mostrar el código QR en la terminal
 bot.on('qr', (qr) => {
     qrcode.generate(qr, {small: true});
-    console.log('📱 ¡ATENCIÓN! Escanea este código QR con tu WhatsApp.');
+    console.log('📱 ¡ATENCIÓN! Escanea este código QR gigante en los logs con tu WhatsApp.');
 });
 
 // 2. Avisar cuando el bot ya entró a la cuenta
@@ -51,7 +73,6 @@ bot.on('ready', () => {
     console.log('🐾 ¡El Bot de la Fundación Huellas está conectado y listo!');
 });
 
-// 3. Leer mensajes y responder (¡Nuestra primera prueba!)
 // ---------------------------------------------------------
 // 🧠 MEMORIAS DEL BOT
 // ---------------------------------------------------------
@@ -102,16 +123,15 @@ bot.on('message_create', async (mensaje) => {
         return;
     }
 
-    // Para ver los mensajes en tu terminal
-    console.log(`Mensaje de ${numero}: ${mensaje.body}`);
-
-    // PASO 0: Inicio
-    if (texto === 'hola' || texto === 'buenas' || texto === 'reporte' || texto === 'Hola' || texto === 'Buenas' || texto === 'Reporte' || texto === 'Buenos dias' || texto === 'Buenos días' || texto === 'Buenas tardes' || texto === 'Buenas noches' || texto === 'Buenos dias' || texto === 'buenos días' || texto === 'buenas tardes' || texto === 'buenas noches') {
+    // PASO 0: Inicio de reporte (Captura variaciones de saludos)
+    const saludos = ['hola', 'buenas', 'reporte', 'buenos dias', 'buenos días', 'buenas tardes', 'buenas noches'];
+    if (saludos.includes(texto)) {
         reportesEnProceso[numero] = { paso: 1, datos: {} };
         mensaje.reply('🐾 ¡Hola! Bienvenido al canal de reportes de la Fundación Huellas.\n\nPara iniciar tu reporte, dime: ¿Qué tipo de caso es? (Ejemplo: Maltrato, Abandono, Rescate)\n\n*(Escribe "cancelar" en cualquier momento para salir).*');
         return; 
     }
 
+    // Lógica del flujo de preguntas
     if (reportesEnProceso[numero]) {
         let estado = reportesEnProceso[numero];
 
@@ -149,42 +169,37 @@ bot.on('message_create', async (mensaje) => {
             estado.paso = 6;
             mensaje.reply('📸 Por último, envíanos una FOTO o responde "no tengo" para finalizar.');
         }
-        // PASO 6: Cierre del reporte
+        // PASO 6: Cierre del reporte y envío de datos
         else if (estado.paso === 6) {
-            mensaje.reply('⏳ Procesando reporte...');
+            mensaje.reply('⏳ Procesando y guardando reporte en la base de datos...');
             
             if (mensaje.hasMedia) {
-                estado.datos.evidencia = "Archivo recibido en WhatsApp";
+                estado.datos.evidencia = "Archivo multimedia recibido en WhatsApp (revisar chat)";
             } else {
-                estado.datos.evidencia = "Sin multimedia. Nota: " + mensaje.body;
+                estado.datos.evidencia = "Sin multimedia. Nota del usuario: " + mensaje.body;
             }
             
             const reporteFinal = {
                 origen: "WhatsApp",
                 telefono: estado.datos.telefono,
                 tipo: estado.datos.tipo,
-                especie: estado.datos.especie, // <-- ENVIAMOS EL NUEVO DATO
+                especie: estado.datos.especie,
                 descripcion: estado.datos.descripcion,
                 ubicacion: estado.datos.ubicacion,
                 evidencia: estado.datos.evidencia
             };
 
             await enviarAGoogleSheets(reporteFinal);
-            mensaje.reply('✅ ¡Reporte registrado con éxito!');
+            mensaje.reply('✅ ¡Reporte registrado con éxito en el Panel Maestro de la Fundación Huellas! Gracias por ayudar.');
             delete reportesEnProceso[numero];
         }
     }
 });
 
-// Encender el bot
+// ---------------------------------------------------------
+// 🚀 ENCENDER EL BOT DE WHATSAPP
+// ---------------------------------------------------------
+console.log('⏳ Inicializando cliente de WhatsApp...');
 bot.initialize();
 
-// ---------------------------------------------------------
-
-app.listen(3000, () => {
-    console.log("Servidor iniciado...");
-});
-
-app.listen(3000, () => {
-    console.log("Servidor del bot corriendo en el puerto 3000");
-});
+// He eliminado las líneas duplicadas de app.listen(3000) que causaban el error al final.
