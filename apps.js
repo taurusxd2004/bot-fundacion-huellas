@@ -17,7 +17,21 @@ async function enviarAGoogleSheets(data) {
         console.error(" Error enviando a Google:", error.message);
     }
 }
+const express = require('express');
+const app = express();
 
+// Render exige usar su propio puerto dinámico en producción
+const PORT = process.env.PORT || 3000;
+
+// Esta es la ruta principal que visitará UptimeRobot
+app.get('/', (req, res) => {
+    res.send('🐾 Servidor de la Fundación Huellas activo y despierto');
+});
+
+// Arrancamos el mini servidor
+app.listen(PORT, () => {
+    console.log(`🌐 Servidor web de mantenimiento escuchando en el puerto ${PORT}`);
+});
 // ---------------------------------------------------------
 // 🤖 INICIALIZACIÓN DEL BOT DE WHATSAPP
 // ---------------------------------------------------------
